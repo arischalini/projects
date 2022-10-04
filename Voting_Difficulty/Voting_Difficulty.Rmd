@@ -1,0 +1,227 @@
+---
+title: "Part Two"
+author: "Pedro BELOTTI, Aris CHALINI, Joshua GRUBER"
+date: "2/28/2022"
+output:
+  pdf_document: 
+    toc: yes
+    number_sections: yes
+    fig_width: 5
+    fig_height: 3.5
+---
+
+```{r, setup, include=FALSE}
+knitr::opts_chunk$set(echo=FALSE, include = FALSE, warning = FALSE) 
+```
+
+```{r}
+library(ggplot2)
+library(summarytools)
+library(plyr)
+library(dplyr)
+library(hrbrthemes)
+library(psych)
+library(moments)
+
+
+# Creating our "Truth repository" with all our data wrangling operations:
+# Adjust file path if necessary
+all_data <- read.csv("lab_1/datasets/anes_timeseries_2020_csv_20220210.csv") 
+
+# Analysis for section 2. 
+no_vote <- subset(all_data, V202123 != -1)
+no_vote_diff <- subset(no_vote, V202123 %in% c(3,6,8,9,10,11,12,13,14) )
+
+
+
+#Remove records where we have no response for difficulty.
+#This will also remove records for those who did not cast a vote. 
+data_difficult <- subset(all_data, V202119 > 0)
+#Create a field to identify subjects as either Democrat or Republican. 
+#If subject does not identify as either, variable V2012300 for grouping ("Closer to Democratic Party or Republican Party")
+data_difficult$party <- ifelse(data_difficult$V201228 == 1, "Democrat",
+                               ifelse(data_difficult$V201228 == 2, "Republican",
+                                      ifelse(data_difficult$V201228 == 0 & data_difficult$V201230 == 1, "Republican",
+                                             ifelse(data_difficult$V201228 == 0 & data_difficult$V201230 == 3, "Democrat",
+                                                    ifelse(data_difficult$V201228 == 3 & data_difficult$V201230 == 1, "Republican",
+                                                           ifelse(data_difficult$V201228 == 3 & data_difficult$V201230 == 3, "Democrat",
+                                                                  ifelse(data_difficult$V201228 == 5 & data_difficult$V201230 == 1, "Republican",
+                                                                         ifelse(data_difficult$V201228 == 0 & data_difficult$V201230 == 3, "Democrat","NULL"))))))))
+
+#Remove NULL values (Records that are not a part of either test group)
+data_difficult_party <- subset(data_difficult,party != "NULL") 
+#Label difficulty variable with interpretable values that correspond with the survey.  
+data_difficult_party$difficult_vote[data_difficult_party$V202119 == 1] = "Not difficult at all"
+data_difficult_party$difficult_vote[data_difficult_party$V202119 == 2] = "A little difficult"
+data_difficult_party$difficult_vote[data_difficult_party$V202119 == 3] = "Moderately difficult"
+data_difficult_party$difficult_vote[data_difficult_party$V202119 == 4] = "Very difficult"
+data_difficult_party$difficult_vote[data_difficult_party$V202119 == 5] = "Extremely difficult"
+
+
+```
+
+\newpage
+
+# Introduction
+
+Elections in the United States have been polarized and decided by thin margins for decades. Difficulty voting, whether from logistical or technical issues, has been a topic of much debate especially given the different demographic appeals of each political party. If the perception of voting difficulty by each party is significantly different, questions could be raised about the overall fairness of the elections.
+
+The elections in 2020 were complicated even further by a historic global pandemic that drove votes sent by mail to record highs. Interestingly, according to the Pew Research Center, Democrat voters were nearly twice as likely as Republican voters to say they voted by mail, showing a clear preference of voting methods between both voters of each party[^1]. This may result in significantly different voting experiences and challenges when casting a vote between both parties.
+
+[^1]: "The voting experience in 2020", Pew Research Center, <https://www.pewresearch.org/politics/2020/11/20/the-voting-experience-in-2020/>
+
+With this context in mind, our analysis aims to contribute to the following question:
+
+*Did Democratic voters or Republican voters experience more difficulty voting in the 2020 election?*
+
+This analysis could provide helpful insight on the perception of the voting process by the different parties and flag a potentially significant issue that could even influence voting results.
+
+# Conceptualization & Operationalization
+
+Our analysis uses data from the 2020 American National Election Studies (ANES). This dataset is composed of 8280 observations and 1771 variables taken from academically-run national surveys of voters, before and after the election.
+
+## Defining Voters
+
+For the purpose of this analysis, voters are defined by anyone who officially cast a vote in the 2020 election. One area of concern is the treatment of voters who experience difficulty and then give up or are not capable of voting. Although this is theoretically possible, we found the impact to be relatively small (only 14% of the voters who did not vote said they had difficulties voting) and therefore not worth expanding our voter definition criteria. [^2].
+
+[^2]: The ANES survey offers a additional questions for respondents who were not able to cast a vote to provide reasons. Respondents who answered "difficulty voting", of those who did not cast their vote, represented only 14% (269 records - variable name V202123 )
+
+```{r}
+# Calculation for paragraph above: 
+per_too_diff_to_vote = nrow(no_vote_diff)/nrow(no_vote)
+
+```
+
+Sampled voters were divided into two test groups:
+
+1.  Democrats - Those who voted in the 2020 election and identify as Democrat or at least consider themselves "Closer to Democratic".
+
+2.  Republican - Those who voted in the 2020 election and identify as Republican or at least consider themselves "Closer to Democratic".
+
+Those who voted in the 2020 election but do not identify as either Democrat or Republican and do not consider themselves close to either of these parties were not included in our analysis.
+
+```{r}
+table(data_difficult$party)
+
+```
+
+## Defining Difficulty
+
+Difficulty voting was captured by the ANES study by question V201219. This variable represents the respondent's answer to the question "How difficult was it for you to vote in this election?" where respondents answer on a scale of 1-5 where 1 is "not difficult at all" and 5 is "extremely difficult" - a Likert scale.
+
+```{r}
+# How difficult was it to vote
+summary(all_data$V202119)
+table(all_data$V202119)
+```
+
+# Statistical Test & Procedure
+
+The null hypothesis of our test can be states as follows:
+
+**Null Hypothesis:** *The population distribution of the reported difficulty in voting for Democratic voters (who voted in the 2020 presidential election) will be equal as the population distribution of the reported difficulty in voting for Republican voters (who voted in the 2020 presidential election).*
+
+The statistical test deemed most appropriate to compare these two groups (Democrats and Republicans) is the Wilcox Rank Sum Test.
+
+Our research shows that while some authors consider t-test valid for application to Likert scales, a more conservative approach is to use a non-parametric such as the Wilcox Rank Sum test.
+
+The 2 key assumptions for performing this test are described below:
+
+1.  Independence is evidenced by the surveys process which polled thousands of respondents on a national scale. Also there should be no clear dependency between party affiliation choices.
+
+2.  Another requirement is a similar distribution spread between both samples which is evidenced by the Likert variable structure and the histogram below.
+
+```{r}
+var.test(V202119 ~ party, data = data_difficult_party, 
+         alternative = "two.sided")
+```
+
+```{r, include = TRUE}
+
+
+desctable1 <- describe(data_difficult_party$V202119, fast = FALSE)
+
+knitr::kable(desctable1, caption = "Descriptive summary statistics of dificulty in voting (V202119)", digits = 4)
+
+```
+
+```{r include = TRUE, fig.cap = "Voting dificulty (V202119) by party inclination"}
+#Comparing histograms of the two groups whose means will be tested. 
+p <- data_difficult_party %>%
+  ggplot( aes(x=factor(difficult_vote, 
+                       levels=c('Not difficult at all', 
+                                'A little difficult', 
+                                'Moderately difficult',
+                                'Very difficult',
+                                'Extremely difficult')), fill= party)) +
+  theme_classic() +
+  geom_histogram(stat = "count") +
+  labs(x="Voting Difficulty", y = "Number of Respondents") +
+  facet_wrap(~party) +
+  theme(legend.position = "none") +
+  scale_y_continuous(limits = c(0,3000), expand = c(0,0)) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  geom_text(aes(label = ..count..), 
+            stat = "count", 
+            vjust = -.4, 
+            family = "serif", 
+            size = 3.5,
+            colour = "black")
+p
+```
+
+Above are the histograms for the two groups whose response was compared. Both of these groups show an extremely right-skewed distribution and heavy kurtosis. We can see from the descriptive statistics that Democrats show higher proportion of voters responding "A little difficult" and "Moderately difficult" when compared to Republicans. It is also important to note that Republicans show a higher proportion of voters responding "Very difficult" and "Extremely difficult". We must also bear in mind that the vast majority of voters (89%) described the voting process as "Not difficult at all".
+
+```{r include = TRUE}
+
+desctable2 <- group_by(data_difficult_party,party) %>%   summarise(
+    count = n(),
+    median = median(V202119, na.rm = TRUE),
+    mean = mean(V202119, na.rm = TRUE), 
+    stdev = sd(V202119, na.rm = TRUE),
+    variance = var(V202119, na.rm = TRUE),
+    max = max(V202119, na.rm = TRUE),
+    min = min(V202119, na.rm = TRUE),
+    skewness = skewness(V202119, na.rm = TRUE),
+    kurtosis = kurtosis(V202119, na.rm = TRUE)
+  )
+
+knitr::kable(desctable2, caption = "Descriptive summary statistics of dificulty in voting (V202119) split by party inclination", digits = 4)
+```
+
+# Results
+
+Our resulting p-value is 0.005112 which represents just about a half percent chance that these two groups have the same expectation for voting difficulty.
+
+```{r include = TRUE}
+wilcoxresult <- wilcox.test(V202119 ~ party, data = data_difficult_party, conf.int = TRUE) 
+
+wilcoxresult 
+```
+
+Therefore, our test yields that on average, democratic voters experienced more difficulty casting their votes than republican voters.
+
+An important limitation for this conclusion is our analysis is the lack of demographics weights that should be applied to our data in order to balance the survey results to the observed national demographic averages.
+
+# Discussion
+
+Our analysis found evidence that there's a significant difference between Democrats and Republicans perspective of difficulty in voting. This is largely due to a higher proportion of Democrats showing mild difficulty in voting relative to Republican. Conversely, Republicans show higher proportion of voters experiencing heavy difficulties in voting. This result merits further research to understand what's behind these perceptions and potentially address practical issues to ensure we are doing all we can to have a fair election process.
+
+```{r}
+data_difficult_party$binary_diff <- ifelse(data_difficult_party$V202119 >1, "Any Difficulty", "Not Difficult")
+
+chisq.test(table(data_difficult_party$binary_diff, data_difficult_party$party))
+
+diff_counts <- as.data.frame(table(data_difficult_party$binary_diff, data_difficult_party$party))
+
+diff_counts$Pct <- ifelse(diff_counts$Var2 == "Democrat", 
+                          round(((diff_counts$Freq)/3072)*100,digits = 1),
+                          round(((diff_counts$Freq)/2695)*100,digits = 1))
+
+diff_counts
+
+```
+
+To cement our findings, we re-categorized the voting difficulty variable into two groups: any difficulty and no difficulty. When we conducted a Chi-squared test on this re-categorized data, we still found that these two groups were significantly different (p-value = 0.004). Democrats reported having any difficulty voting 2.4% more than Republicans. 
+
+Therefore, based on this ANES dataset, we have found that Democratic-leaning voters have experienced more difficulty voting than Republican-leaning voters in the 2020 presidential election. 
