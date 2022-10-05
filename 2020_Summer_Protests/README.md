@@ -1,1 +1,1 @@
-# Project2_Bari_Chalini_Godinez_Lucas
+# EDA_Project_Bari_Chalini_Godinez_Lucas
