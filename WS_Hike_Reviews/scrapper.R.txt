@@ -1,0 +1,75 @@
+#scrape the website for its trail information. This is edited TidyX code. 
+scrape_trails <- function(start_int){
+  page_url <- paste0(
+    "https://www.wta.org/go-outside/hikes?b_start:int=",
+    start_int
+  )
+  
+  page_html <- read_html(page_url)
+  
+  page_html %>% 
+    
+    html_nodes(".search-result-item") %>% 
+    
+    map(
+      function(hike){
+        
+        hike_name <- hike %>% html_nodes(".listitem-title") %>% html_nodes("span") %>%  html_text()
+        hike_location <- hike %>% html_node("h3") %>% html_text()
+        
+        hike_stats <- hike %>% html_node(".hike-stats")
+        
+        hike_length <- hike_stats %>% html_nodes(".hike-length") %>%html_nodes("span") %>%  html_text()
+        hike_gain <- hike_stats %>% html_nodes(".hike-gain") %>%html_nodes("span") %>%  html_text()
+        hike_highpoint <- hike_stats %>% html_nodes(".hike-highpoint") %>%html_nodes("span") %>%  html_text()
+        hike_rating <- hike_stats %>% html_nodes(".hike-rating") %>%html_nodes(".current-rating") %>%  html_text()
+        hike_rating_count <- hike_stats %>% html_nodes(".hike-rating") %>%html_nodes(".rating-count") %>%  html_text() #edit
+        
+        hike_desc <- hike %>% html_nodes(".listing-summary") %>% html_text()
+        
+        hike_features <- hike %>% html_nodes(".trip-features") %>% html_nodes("img") %>% html_attr("title") %>% list()
+        
+        tibble(
+          name = hike_name,
+          location = hike_location,
+          length = hike_length,
+          gain = hike_gain,
+          highpoint = hike_highpoint,
+          rating = hike_rating,
+          rating_count = hike_rating_count, #edit
+          features = hike_features,
+          description = hike_desc
+        )
+      }) %>% 
+    bind_rows() %>% 
+    mutate(description = str_remove(description, "\n") %>% str_squish())
+}
+
+start_int <- c(1, seq(30, 3840, by = 30))
+
+hike_data <- start_int %>% 
+  map_dfr(scrape_trails)
+
+#create field for trail type, total length, and general location.
+clean_hike_data <- hike_data %>% 
+  mutate(
+    trip = case_when(
+      grepl("roundtrip",length) ~ "roundtrip",
+      grepl("one-way",length) ~ "one-way",
+      grepl("of trails",length) ~ "trails"),
+    
+    length_total = as.numeric(gsub("(\\d+[.]\\d+).*","\\1", length)) * ((trip == "one-way") + 1),
+    
+    rating = as.numeric(rating), #edit
+    gain = as.numeric(gain),
+    highpoint = as.numeric(highpoint),
+    
+    location_general = gsub("(.*)\\s[-][-].*","\\1",location),
+    
+    rating_count = as.numeric(gsub("[[:punct:][:blank:][:alpha:]]","",rating_count))
+    
+    #Only keep records with at least 10 votes. 
+    min10_hike_data <- filter(clean_hike_data, rating_count >= 10)
+    #remove the trails where trip is "trails". this is only three records and their removal leaves no uncertainty about the total length field. 
+    min10_hike_data <- filter(min10_hike_data, trip != "trails")
+    

@@ -1,0 +1,50 @@
+WITH a AS(
+SELECT title,
+    listed_in || ',' as listed_genres,
+    SUBSTR(listed_in || ',', 1, INSTR(listed_in || ',', ',')) AS first_genre
+FROM netflix_shows),
+
+b AS(
+SELECT title,
+    REPLACE(listed_genres, first_genre, '') AS next_two_genres,
+    SUBSTR(REPLACE(listed_genres, first_genre, ''), 1, INSTR(REPLACE(listed_genres, first_genre, ''), ',')) AS second_genre
+FROM a),
+
+c AS(
+SELECT title,
+    REPLACE(next_two_genres, second_genre, '') AS third_genre
+FROM b),
+
+tv_genres AS(
+SELECT a.title, a.first_genre, b.second_genre, c.third_genre
+FROM a
+JOIN b ON a.title = b.title
+JOIN c ON a.title = c.title),
+
+first_count AS(
+SELECT first_genre, count(*) AS count_1
+FROM tv_genres
+GROUP BY first_genre),
+
+second_count AS(
+SELECT second_genre, count(*) AS count_2
+FROM tv_genres
+WHERE second_genre IS NOT ''
+GROUP BY second_genre),
+
+third_count AS(
+SELECT third_genre, count(*) AS count_3
+FROM tv_genres
+WHERE third_genre IS NOT ''
+GROUP BY third_genre),
+
+comb_counts AS(
+SELECT TRIM(first_genre) AS genre, count_1 AS count FROM first_count
+UNION
+SELECT TRIM(second_genre), count_2 FROM second_count
+UNION
+SELECT TRIM(third_genre), count_3 FROM third_count)
+
+SELECT genre, sum(count)
+FROM comb_counts
+GROUP BY genre;

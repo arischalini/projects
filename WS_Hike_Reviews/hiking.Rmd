@@ -1,0 +1,454 @@
+---
+title: Pics or it Didn't Happen? Assessing the Impact of Trail Photogenicity on Hiker Ratings in Washington
+author: Aris Chalini, Ed Kirton, Rebecca Nissan 
+date: April 2022
+output:
+  pdf_document: 
+    toc: true
+    toc_depth: 2
+  html_document:
+    df_print: paged
+---
+
+```{r Load packages, include = FALSE}
+library(dplyr)
+library(tidyverse)
+library(ggplot2) 
+library(sandwich)
+library(stargazer)
+library(stringr)
+library(lmtest)
+```
+# 1 Introduction 
+
+## 1.1 Motivation
+
+What makes some hiking trails popular and others not? Is the trail choosing decision process simply a matter of assessing convenience and difficulty? All it takes is our intuition to know that there is more to it. When people choose hikes they are also deciding what they want to see. Nowadays in particular, we believe that people are interested in what pictures they will take. We think that for many people, taking an awesome picture during a hike will have a positive effect on their fondness for that trail - and would raise their subsequent rating of that trail. This study seeks to test the effect of photogenic trail features on user-generated trail ratings. Since not all hikers have access to all trails due to difficulty differences, we must control for difficulty. In general, we expect the effect of photogenicity on trail rating to be larger than that of trail difficulty. 
+
+Our hope is that findings from studies such as this one could be used to inform hiking trail design. This study is designed to guide our organization, the Washington Trails Association, in deciding where and how to construct or improve hiking trails. We are interested in understanding which photogenic features appeal most to Washington hikers and to what extent a hike's photogeneity impacts hiker ratings. We suspect that many people choose hikes that are most likely to produce content that would generate additional "likes" on Instagram or similar platforms. Therefore, the existence of photogenic features on a trail may lead to a higher average rating. If we learn that our identified set of photogenic features do lead to higher ratings, we might consider building more trails that highlight those particular features and incorporating signage that directs hikers towards photo opportunities. 
+
+## 1.2 Research Question
+
+Given our data source and the methodology of our research, the research question we will be answering is the following: 
+
+**Do photogenic features cause trails to be rated more highly in Washington State?**
+
+Our dependent variable - trail ratings - is included in our primary data source and reflects the opinions of people who use the Washington Trails Association's website to assess hikes. Our independent variable, a feature we've called "photogenicity," reflects the presence of one or more features that we consider to be photogenic. These features should make a hike more appealing for those wishing to post about it on social media websites. Thus, photogenicity is operationalized as a indicator variable based on the presence of any of the following four features: Mountains, Waterfalls, Lakes, and Summit Views. Our choice of which features to include was informed by a sub-study of popular Instagram pictures, the methodology for which will be detailed in a later section. 
+
+# 2 Data and Methology
+
+## 2.1 About the Data
+Our dataset is scraped from the Washington Trails Association's website [WTA](https://www.wta.org/go-outside/hikes). It is a donation-funded organization that relies heavily on volunteers and corporate partners. They provide hiking guides, champion environmental stewardship, created Washington's largest volunteer trail maintenance program, and collect useful trail information. Their website provides users (free to join) with a hiking guide that has a total of 3933 listings. Expert hikers write the content for each trail listing which is then vetted by WTA staff. Our scraping function was provided by TidyX and is slightly edited in order to scrape one additional piece of information: rating vote counts. Link: [tidytuesday](https://github.com/rfordatascience/tidytuesday/blob/master/data/2020/2020-11-24/readme.md). 
+
+```{r Load data, include = FALSE}
+#hike_data <- readr::read_rds(url('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2020/2020-11-24/hike_data.rds'))
+#tuesdata <- tidytuesdayR::tt_load('2020-11-24')
+#hike_data <- tuesdata$hike_data
+hike_data <- readRDS('./data/hike_data.rds')
+glimpse(hike_data)
+```
+
+## 2.2 Outcome Variable 
+
+Our outcome variable is the average rating for each trail. Each WTA user has the option to rate any trail listed on the site with a score from 1 to 5 stars. No partial stars are allowed when a user is assigning their rating to a trail. That is, any user has the following set of values to choose from when rating a video: [1, 2, 3, 4, 5]. However, the average rating does allow for partial stars based on a decimal rounded to the nearest hundredth. Since our outcome variable is an average, and is meant to represent the collective opinion (not that of only a few individuals), we have decided to omit records where the average does not correspond to at least 5 votes.
+
+```{r Cleaning and exploring the rating variable, echo = FALSE, results='hide'}
+# discard hikes with less than 5 ratings
+hike_data <- hike_data %>% filter(rating_count >= 5)
+glimpse(hike_data)
+summary(hike_data$rating)
+summary(hike_data$rating_count)
+```
+
+There are 1217 records in this dataset. On this rating scale, without any influential factors the expectation would be 3 stars. The mean rating for these 1217 records is 3.574 and the median rating is 3.620. The mean rating_count for this dataset is 17.45 votes and the median rating_count is 8.00 votes. There are a few outliers - trails with a lot of ratings. 
+
+Ten observations of rating are flagged as outliers for being outside the Q1-1.5IQR standard for minimums. Despite these outliers, our distribution is relatively normal with only a slight left skew in the direction of those outliers. This slight skew could demonstrate a predisposition of WTA users to rate trails more fondly. Another possibility is that people who go through the trouble of going on a hike they found are more likely to choose a hike which they would rate more fondly. 
+
+```{r Summary plots for rating variable, echo = FALSE, results='hide',message=FALSE}
+#boxplot(x=hike_data$rating)
+ggplot(hike_data, aes(x=rating)) + 
+  geom_histogram(color="darkblue",fill="lightblue") +
+  geom_vline(data=hike_data, aes(xintercept=mean(rating)), linetype="dashed") +
+  labs(title = "Average Trail Rating (With At least 5 Votes)",x="Trail Rating",y="Count")
+
+#boxplot(x=hike_data$rating_count)
+ggplot(hike_data, aes(x=rating_count)) + 
+  geom_histogram(color="darkblue",fill="lightblue",bins=100) +
+  geom_vline(data=hike_data, aes(xintercept=mean(rating_count)), linetype="dashed") +
+  labs(title = "Number of Rating Votes per Trail (Among Trails With At Least 5 Votes)",x="Number of Voters",y="Trail Count")
+
+#boxplot.stats(hike_data$rating)$out
+```
+
+## 2.3 Trail Features
+
+Our dataset contained information about features in two forms: a formal list of feature tags and a trail description with some free-text information. We transformed all of the trail feature tags into R features. Most feature variables are binary indicators for the presence of a feature, but trail mileage and elevation gain are numeric. A `loop` feature was also added to indicate whether that keyword appeared in the trail description text.
+
+```{r Features data cleaning, echo = FALSE, results='hide'}
+
+# initial exploration for features - determine what is available 
+features <- unique(unlist(hike_data$features))
+features
+# write descriptions to file for text processing
+#write.csv(hike_data$description, "./descriptions.csv")
+
+# create vars for features
+hike_data <- hike_data %>% mutate(dogs = grepl("Dogs allowed on leash", features)) %>%
+  mutate(wildlife = grepl("Wildlife", features)) %>%
+  mutate(kids = grepl("Good for kids", features)) %>%
+  mutate(lakes = grepl("Lakes", features)) %>% 
+  mutate(autumn = grepl("Fall foliage", features)) %>% 
+  mutate(ridges = grepl("Ridges/passes", features)) %>% 
+  mutate(campsites = grepl("Established campsites", features)) %>% 
+  mutate(mountain = grepl("Mountain views", features)) %>% 
+  mutate(trees = grepl("Old growth", features)) %>% 
+  mutate(waterfalls = grepl("Waterfalls", features)) %>% 
+  mutate(flowers = grepl("Wildflowers/Meadows", features)) %>% 
+  mutate(rivers = grepl("Rivers", features)) %>% 
+  mutate(no.dogs = grepl("Dogs not allowed", features)) %>% 
+  mutate(coast = grepl("Coast", features)) %>% 
+  mutate(summits = grepl("Summits", features)) %>% 
+  mutate(loop = grepl('loop', description, ignore.case=TRUE)) %>%
+  select(-c(features, description))
+```
+
+### Operationalizing Trail Photogenicity
+
+In order to inform our conception of trail photogenicity we examined Instagram photos and tallied key features. We did this in two different ways: (1) we looked at 30 photos gathered from doing a search for "washington trails" and (2) we looked at 30 photos from the top tags related to hiking trails in Washington state. In both cases, every ninth photo was selected for the sample and the number of times each of the available features appeared was observed.  The CSV files may be found in this report's Git repository.  The most common four features are combined into a new boolean indicator: `photogenic`. The variable is True when a trail contains any of the four features we found to be most popular during a random survey of popular Instagram posts. In said survey, we randomly sampled photos from a search of "washington trails" and also sampled from three of the most popular related hashtags. The four features that were most popular in instagram photos of Washington trails were mountains, waterfalls, lakes, and summit views. 
+
+```{r Photogenicity var, echo = FALSE, results='hide'}
+hike_data <- hike_data %>% mutate(photogenic = case_when(
+    mountain ~ TRUE,
+    summits ~ TRUE,
+    lakes ~ TRUE,
+    waterfalls ~ TRUE,
+    TRUE ~ FALSE)
+)
+```
+
+### Controls
+
+Our controls include all of WTA's tagged features that are not already incorporated into photogenicity, plus the `loop` variable. 
+The WTA also provides information on trail mileage and elevation gain, which we consider to be important features because they describe the trail's difficulty. 
+
+The data retrieved from the WTA has length as a string, so in order to obtain numeric values, we needed to match for the descriptive words "one-way" and "roundtrip" and multiply by 2 or 1, respectively, in order to have comparable (roundtrip) values.  The phrase "miles of trails" was also used to describe a network of available trails and it seemed reasonable to use 0.5 as a multiplier in this case.  The `total_miles` variable is the product of the numeric length value and the multiplier; this value is used as the length in all analyses to follow.
+
+```{r Transform trail lengths into comparable numbers, echo = FALSE, results='hide'}
+
+# lengths need to be multiplied by a factor to be made comparable
+hike_data <- hike_data %>% mutate(length_multiplier = case_when(
+  grepl("roundtrip", length) ~ 1,
+  grepl("one-way", length) ~ 2,
+  grepl("miles of trails", length) ~ 0.5,
+  TRUE ~ 0
+))
+
+# add new column with (numeric) round-trip lengths
+hike_data$miles = as.numeric(gsub("([a-z ,-]+)", "", hike_data$length)) 
+hike_data$total_miles = hike_data$miles * hike_data$length_multiplier
+
+# qc check:
+errors <- hike_data %>% filter(length_multiplier == 0)
+nrow(errors)  # should be 0
+
+errors <- hike_data %>% filter(is.na(miles))
+nrow(errors)  # should be 0
+```
+
+The mean trail length is 9.14 miles and the median length is 7.000 miles. There are 76 outliers in this dataset. While the max value is 295 miles, 94% of the data has a value less than the minimum outlier (20.2 miles). This results in an extremely skewed distribution. Since we are only interested in trails that an average person can do in a day or a weekend, we felt these extremely long trails belonged to an exceptional set ("excursions") and should be excluded.  Removal of these outliers would lead to a more normal distribution. It is slightly skewed to the right with a mean trail length of 6.973 miles and a median trail length of 6.4 miles. Removal of these outliers results in in a distribution where the mean and median are much closer in value. Note that a log transformation does not seem to improve the slight right-skew. Hereafter we consider only trails that are at most 20 miles in length.
+
+```{r Exclude excursions, echo = FALSE, results='hide'}
+ggplot(hike_data, aes(x=length_total)) + 
+  geom_histogram(color="darkblue",fill="lightblue",bins=100) +
+  geom_vline(data=hike_data, aes(xintercept=mean(length_total)), linetype="dashed") +
+  labs(title = "All trail lengths",x="Total Miles",y="Count")
+
+# discard hikes > 20 miles (we are analyzing day/weekend hikes only)
+hike_data <- hike_data %>% filter(total_miles <= 20)
+hike_data <- hike_data %>% mutate(log_total_miles = log(total_miles))
+
+ggplot(hike_data, aes(x=total_miles)) + 
+  geom_histogram(color="darkblue",fill="lightblue",bins=100) +
+  geom_vline(data=hike_data, aes(xintercept=mean(total_miles)), linetype="dashed") +
+  labs(title = "Day/weekend trail lengths (excursions excluded)",x="Total Miles",y="Count")
+
+ggplot(hike_data, aes(x=log_total_miles)) + 
+  geom_histogram(color="darkblue",fill="lightblue",bins=100) +
+  geom_vline(data=hike_data, aes(xintercept=mean(log_total_miles)), linetype="dashed") +
+  labs(title = "Natural-log of Day/weekend trail lengths (excursions excluded)",x="Total Miles",y="Count")
+```
+
+For the elevation gain variable, our histogram once again shows a right skew, so we consider a log transformation: 
+
+```{r Gain transform, echo = FALSE, results='hide'}
+
+ggplot(hike_data, aes(x=gain)) + 
+  geom_histogram(color="darkblue",fill="lightblue",bins=100) +
+  geom_vline(data=hike_data, aes(xintercept=mean(gain)), linetype="dashed") +
+  labs(title = "Trail Elevation Gain",x="Gain (ft)",y="Count")
+
+# natural log of gain
+hike_data <- hike_data %>% mutate(log_gain = log(gain+1))
+ggplot(hike_data, aes(x=log_gain)) + 
+  geom_histogram(color="darkblue",fill="lightblue",bins=100) +
+  geom_vline(data=hike_data, aes(xintercept=mean(log_gain+1)), linetype="dashed") +
+  labs(title = "Natural Log of Trail Elevation Gain",x="Gain (ft)",y="Count")
+
+```
+
+Ultimately, we decided to use the untransformed variable for both length and gain, as the log-transformed histograms did not appear better (i.e. more bell-shaped).
+
+Since both length and elevation change ultimately describe the difficulty of a trail, we combined these features into a `difficulty` score by scaling their measurements by using the proportion to the maximums and taking their product.
+
+```{r Difficulty variable, echo = FALSE, results='hide'}
+max_miles <- max(hike_data$total_miles)
+max_miles
+max_gain <- max(hike_data$gain)
+max_gain
+
+hike_data <- hike_data %>% mutate(difficulty = total_miles/max_miles + gain/max_gain )  # 0..2
+hike_data <- hike_data %>% mutate(log_difficulty = log(difficulty))
+
+#ggplot(hike_data, aes(x=difficulty)) + 
+#  geom_histogram(color="darkblue",fill="lightblue",bins=100) +
+#  geom_vline(data=hike_data, aes(xintercept=mean(difficulty)), linetype="dashed") +
+#  labs(title = "Trail Difficulty Scores",x="Difficulty",y="Count")
+
+#ggplot(hike_data, aes(x=log_difficulty)) + 
+#  geom_histogram(color="darkblue",fill="lightblue",bins=100) +
+#  geom_vline(data=hike_data, aes(xintercept=mean(difficulty)), linetype="dashed") +
+#  labs(title = "Natural-Log of Trail Difficulty Scores",x="Difficulty",y="Count")
+```
+## 2.4 Breakdown by Environment
+
+Hikes vary considerably by their environment.  To determine whether our analysis holds in every environment, we've classified hikes as belonging to one of three environment types based upon their location. We determined these three environment categories based on the unique categories within the "location" variable in the WTA dataset. Once we narrowed the list of locations to 11 unique areas, we manually tagged each of those 11 areas as either "coastal," "mountainous," or "desert."
+
+```{r creating environment variables, echo = FALSE, results = 'hide'}
+# create and populate an environment variable based on location 
+# convert location string to factor
+hike_data$location <- as.factor(hike_data$location)
+#figure out all the unique instances there are in the location variable 
+unique(hike_data$location)
+# there are 61 unique options. some contain overlaps (e.g. X-A and X-B)
+hike_data$region <- sub("--.*", "", hike_data$location)
+hike_data$region <- sub(" --.*", "", hike_data$location)
+unique(hike_data$region) 
+
+# set environment type based on location
+hike_data <- hike_data %>% mutate(environment = case_when(
+    grepl("Mount Rainier Area", region) ~ "mountainous",
+    grepl("Cascades", region) ~ "mountainous",
+    grepl("Snoqualmie", region) ~ "mountainous",
+    grepl("Issaquah Alps", region) ~ "mountainous",
+    grepl("Central Washington", region) ~ "mountainous",
+    grepl("Eastern Washington", region) ~ "desert",
+    grepl("Olympic Peninsula", region) ~ "coastal",
+    grepl("Southwest Washington", region) ~ "coastal",
+    grepl("Puget Sound", region) ~ "coastal",
+    TRUE ~ "unknown")
+)
+
+# qc-check
+unique(hike_data$environment) # there should not be any "unknown"
+```
+
+# 3. Modeling
+
+## 3a. Model Building
+
+In order to assess the effect of photogenicity on trail ratings, we first explore a basic model, and then build subsequent models with additional covariates to potentially improve explanatory power. Even our most basic model includes a control for hike difficulty because we deem it so important that it should not be excluded.  Our initial (a priori) hypothesis was that photogenicity partially determines ratings and that photo-opportunities are more predictive of the rating than difficulty (i.e. trail length or gain).
+
+For our base model, we consider two possibilities: 
+
+$$
+rating = \beta_0 + \beta_1 photogenic + \beta_2 difficulty
+$$
+$$
+rating = \beta_0 + \beta_1 photogenic + \beta_2 totalmiles + \beta_3 gain
+$$
+Here, we check whether combining total miles and elevation gain into difficulty is better than having them separate.
+
+```{r initial model, echo = FALSE}
+model1 <- lm(rating ~ photogenic + difficulty, data=hike_data)
+coef1 <- coeftest(model1, vcov=vcovHC)
+coef1
+
+model1B <- lm(rating ~ photogenic + total_miles + gain, data=hike_data)
+coef1B <- coeftest(model1B, vcov=vcovHC)
+coef1B
+
+f_test_1_1B <- anova(model1, model1B, test = 'F')
+f_test_1_1B
+```
+
+From above, we see that we should not combine total miles and gain into a single variable. Therefore, our final "base model" includes length and elevation gain separately. 
+
+We also (a priori) expected trails with the "loop" keyword in the description to be a determining factor, so our second model adds loop as a covariate. 
+
+$$
+rating = \beta_0 + \beta_1 photogenic + \beta_2 totalmiles + \beta_3 gain + \beta_4 loop
+$$
+
+However, an F-test did not support our expectation and the "loop" feature was not included in subsequent models.
+
+```{r model with loop, echo = FALSE}
+model2 <- lm(rating ~ photogenic + total_miles + gain + loop, data=hike_data)
+coef2 <- coeftest(model2, vcov=vcovHC)
+coef2
+
+f_test_1B_2 <- anova(model1B, model2, test = 'F')
+f_test_1B_2
+```
+
+Our dataset included other features that could also affect ratings. We tried adding all features not previously used to see if any of them might improve the model. Our third model is as follows: 
+$$
+rating = \beta_0 + \beta_1 photogenic + \beta_2 total_miles + \beta_3 gain + \beta_4 kids + \beta_5 dogs + \beta_6 wildlife + \beta_7 autumn + $$
+$$
+\beta_8 ridges + \beta_9 campsites + \beta_10 trees + \beta_11 flowers + \beta_12 rivers + \beta_13 coast
+$$
+We then evaluate this third model relative to the first and second models:
+
+```{r model with all other features included, echo = FALSE}
+
+# add all the features not previously used
+model3 <- lm(rating ~ photogenic + total_miles + gain + kids + dogs + wildlife + autumn + ridges + campsites + trees + flowers + rivers + coast, data=hike_data)
+
+coef3 <- coeftest(model3, vcov=vcovHC)
+coef3
+
+f_test_1B_3 <- anova(model1B, model3, test = 'F')
+f_test_1B_3
+```
+
+Adding the additional features significantly improves the model.  If we remove the features not indicated as significant by the t-tests, the smaller model is not significantly better (below).  So we use the fuller model3 as the final model.
+
+```{r model with significant features, echo = FALSE}
+model4 <- lm(rating ~ photogenic + total_miles + gain + kids + ridges + campsites + coast, data=hike_data)
+coef4 <- coeftest(model4, vcov=vcovHC)
+coef4
+
+f_test_4_3 <- anova(model4, model3, test = 'F')
+f_test_4_3
+```
+\newpage 
+
+## 3b. Testing the model in different environments
+
+Lastly we wished to see if our model holds up under each of the three environments. 
+
+```{r separate data by environment, echo = FALSE, results='hide'}
+mountainous <- hike_data %>% filter(environment == "mountainous")
+nrow(mountainous)
+mean(mountainous$difficulty)
+
+coastal <- hike_data %>% filter(environment == "coastal")
+nrow(coastal)
+mean(coastal$difficulty)
+
+desert <- hike_data %>% filter(environment == "desert")
+nrow(desert)
+mean(desert$difficulty)
+
+## MOUNTAINOUS:
+
+model_mountainous <- lm(rating ~ photogenic + total_miles + gain + kids + dogs + wildlife + autumn + ridges + campsites + trees + flowers + rivers + coast, data=mountainous)
+coef_mountainous <- coeftest(model_mountainous, vcov=vcovHC)
+coef_mountainous
+
+## DESERT:
+
+model_desert <- lm(rating ~ photogenic + total_miles + gain + kids + dogs + wildlife + autumn + ridges + campsites + trees + flowers + rivers + coast, data=desert)
+coef_desert <- coeftest(model_desert, vcov=vcovHC)
+coef_desert
+
+## COASTAL:
+
+model_coastal <- lm(rating ~ photogenic + total_miles + gain + kids + dogs + wildlife + autumn + ridges + campsites + trees + flowers + rivers + coast, data=coastal)
+coef_coastal <- coeftest(model_coastal, vcov=vcovHC)
+coef_coastal
+```
+
+
+```{r Stargazer second table, echo= FALSE, comment = NA}
+stargazer(model_desert, model_mountainous, model_coastal, title = "Results by Region", type = "text", dep.var.labels=c("Trail Ratings"), no.space = TRUE, single.row = TRUE, column.sep.width = "1pt", font.size = "small", column.labels = c("Desert", "Coastal", "Mountainous"))
+```
+
+Our model is useful for predicting ratings in mountainous regions, which account for most hikes (72%) and reasonably well for coastal regions (25%).  The "good for kids" feature wasn't significant (by coefficient T-Test) in the coastal region, but this may be because such hikes are generally flat and not treacherous (i.e. loose stone, precipitous trails), so this feature isn't particularly informative here.  For the desert hikes (<3%), none of our predictors were significant.  So while we aren't able to support the importance of photo-ops for these hikes, the sparsity of these hikes is consistent with the notion that there just aren't many noteworthy sights in eastern Washington.  Perhaps if we had additional features available, such as "solitude", "stargazing", or had used "flowers" then we could have built a better model for these hikes.
+
+\newpage
+
+# 4. Results
+
+```{r Stargazer table, echo= FALSE, comment = NA}
+stargazer(model1B, model2, model3, title = "Results", type = "text", dep.var.labels=c("Trail Ratings"), no.space = TRUE, single.row = TRUE, column.sep.width = "1pt", font.size = "small")
+```
+
+Our results for our main 3 models suggest that photogenic features do cause higher ratings by a small but significant amount. This is effect is mostly robust to covariates, and represents about an effect size of about 0.2 points. In other words, on average, photogenic hikes receive 0.2 more points (on the 5-point scale) relative to non-photogenic hikes. This effect is statistically significant (p<0.01). We believe that this effect represents a meaningful but small practical significance. This change is only about 4% of the highest possible score (5), but it could be the difference between a 3.9 and a 4.1, which could feel very different to a prospective hiker. We also see statistically significant and positive effects for kid-friendly hikes and hikes with ridges, campsites, and coasts.  Total miles has a small negative influence and elevation gain has a statistically significant but miniscule effect.
+
+As described in the modeling section above, follow-up analyses also showed that the significance of photogenicity only holds in two individual sub-regions (coastal and mountainous), but that is likely because we only have 29 observations for the desert, and also because there are unlikely to be waterfalls or lakes in that area. 
+
+# 5. Limitations
+
+## 5a. Statistical limitations 
+
+Since we have a large sample, we only need to evaluate the two large sample assumptions. 
+ 
+### Independent and Identically Distributed (I.I.D)
+
+The I.I.D. assumption may be violated. A user can rate multiple trails, which could lead to some dependent relationship between those ratings consistent with that particular user's preferences. Perhaps one very active user really likes steeper trails, and gives higher grades to all steep trails, thus driving up those ratings systematically. Similarly, the distribution of ratings from one user might differ from the distribution of ratings from another user if one is a more generous grader and the other is more harsh. In a future study, we might be able to control for this if we had information about which users provided which ratings. 
+
+Another potential violation of I.I.D comes from geographic clustering. Washington has multiple different environments, including the desert, several mountainous regions, and a coastal region. It is likely that observing one observation from a specific region would tell us something about other observations from that region. To mitigate this problem, we also examine our main model within each individual region. 
+
+### Unique BLP
+
+Here need to check that there is no perfect collinearity; in other words, no X variable is a perfect combination of the other X variables.  As these are independent features, there is no risk of such colinearity.  We can confirm that we have no collinearity because R did not drop any of the variables from our models.
+
+## 5b. Structural Limitations
+
+### Omitted Variable Bias 
+
+Despite our inclusion of several control variables (for example, the difficulty of the hike and other non-photogenic features), there are still several omitted variables that could affect both photogenicity and ratings:
+
+*Season & Weather*
+
+The time of year when someone does a hike could definitely affect the rating - the same trail could be gorgeous in the summer and impassable in winter! The same is true about the weather on any given day. Season and weather also affect the existence of certain features such as waterfalls - or at least the ability to see and record those features. To take an example, you can say that early summertime causes higher ratings and "causes" waterfalls. If we do not account for the season in which ratings were recorded and the weather on the day of recording, we cannot determine if the photogenic features are really the thing driving ratings up, or if perhaps the driving factor is the season/weather. 
+
+*Accessibility*
+
+It is possible that people give higher ratings to trails that are close to a major city (or perhaps the opposite - maybe people like solitude). In either case, the ease of access to a trail can affect its rating. Trails that are accessible from developed areas may also be less likely to have superb mountain views or other key features. 
+
+### Reverse Causality 
+
+The risk of reverse causality is relatively low in this case because the existence or non-existence of features could not be changed by people's opinions of those features. The only risk that arises here is that the tagging of those features is somehow biased by people's preferences (for example, they only document the existence of a waterfall on the trail if they also liked the hike). In our dataset, this risk is low because experts build the hike profiles, and especially since they are not necessarily the same people casting the votes, it is reasonable to assume they are documenting features with fidelity. 
+
+### Potential Operationalization Issues
+Perhaps the most notable limitation for our conclusions from this study is the fact that we don't know whether the *reason* people rate trails with photogenic features highly is because they want to take good pictures on hikes - perhaps (we hope) people like to experience those features in the moment, and that's why those features cause high ratings. If we wanted to further dissect the motivation behind trail preferences, we would need an experimental design.
+
+# 6. Conclusion
+
+The goal of this study was to evaluate the impact of key trail features on trail rating. In particular, we set out to see if the presence of photogenic features (i.e. Mountains, Waterfalls, Lakes, or a Summit Views) causes higher trail ratings. We found that when difficulty (total miles and gain) is held constant, the presence of any of these features is likely to cause a 0.2 point increase in trail rating. The effect of trail photogenicity was found to be statistically significant, however it isn't the only significant determinant.
+
+We then created a second model that includes loop as a feature that may predict trail rating. Contrary to our a priori expectation, loop was found to not have a significant effect. In the interest of identifying significant features, a third, full model was run with all the relevant information available in the dataset and the t-test scores evaluated. We found that of remaining trail features, ridges, coasts, campsites, and kid-friendliness were also significant features. 
+
+Although the effect of trail photogenicity was significant in all models, the effect size is small and further study would be necessary in order to decide on how much money should be denoted to trail improvements.
+
+In addition, we evaluated if these particular photogenic features had a different impact on trail rating depending on the particular ecological region of Washington state. Since our third model captured the most variance of our outcome variable, we decided to use this model in our comparison across ecological regions. Interestingly we found that photogenic factors do not have a significant effect on trail rating when we only look at trails in the desert ecological region; in fact no factors were significant for predicting ratings in the desert, which comprised of only 29 trails (<3%).  This may be because of our operational definition, the small number of desert trails, and/or that people go to the desert for other features that we don't have data for (e.g. solitude).
+
+By understanding what leads people to assign a high rating to a trail we can take a more informed approach to trail-building and trail-marketing. This is ideal because if more people have positive outdoor experiences, then perhaps people will place more value on nature and conservationist efforts can gain more traction. In order to improve peoples' experiences, we recommend that the WTA do the following:
+
+  - Consider where hikers could take a good picture of Mountains, a Lake, a River, or a Summit View when designing new hiking trails. 
+  - Invest in short spur-trails that lead to great views of these particular features. 
+  - Erect signage along the trail to direct hikers to points that make for great pictures
+
+```{r Older notes for OVB, include = FALSE }
+
+### APPENDIX
+
+#Other ideas we can maybe incorporate: Grader Experience? Rate Count? People tend to do photogenic hikes more often, so  more photogenic hikes are likely to have more ratings. It is also possible that a trail's number of rating (rate_count in our data) influences its average rating systematically. For example, a trail with only a few ratings might have a more extreme high or low average if it ultimately just captures the opinion of one very angry or very happy person. This is one of the reasons we chose to drop observations with fewer than 5 ratings. We may still have a problem, though, if those with very high rate counts have systematically different ratings than those with low or medium rate counts. There is some evidence for this in the scatter plot below, where we see that hikes with many ratings have generally higher scores. 
+
+#
+#cor(hike_data$rating_count, hike_data$rating)
+#ggplot(hike_data, aes(x = rating_count, y = rating)) +
+#  ggtitle("Average Ratings by Number of Ratings") +
+#  geom_point()
+```

@@ -1,0 +1,25 @@
+WITH us_topsongs AS(
+SELECT Track_Name, Artist, COUNT(*) AS days_in_top200
+FROM spotify_top200
+WHERE Region = 'us' 
+GROUP BY Track_Name, Artist),
+
+mx_topsongs AS(
+SELECT Track_Name, Artist, COUNT(*) AS days_in_top200
+FROM spotify_top200
+WHERE Region = 'mx' 
+GROUP BY Track_Name, Artist),
+
+us_mx_shared AS(
+SELECT us.Track_Name, us.Artist, us.days_in_top200, mx.days_in_top200, (us.days_in_top200-mx.days_in_top200)*(us.days_in_top200-mx.days_in_top200) AS squared_error
+FROM us_topsongs as us
+INNER JOIN mx_topsongs as mx
+    ON us.Track_Name = mx.Track_name AND us.Artist = mx.Artist
+WHERE us.Track_Name != '' AND us.Artist != ''),
+
+sse AS(
+SELECT SUM(squared_error)
+FROM us_mx_shared)
+
+SELECT count(*)
+FROM us_mx_shared

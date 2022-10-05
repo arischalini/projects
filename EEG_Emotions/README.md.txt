@@ -1,0 +1,2 @@
+Primary dataset can be found here: https://www.kaggle.com/datasets/birdy654/eeg-brainwave-dataset-feeling-emotions.
+Secondary dataset can be found here: https://www.kaggle.com/code/shreyaspj/detecting-emotions-using-eeg-waves.

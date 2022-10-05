@@ -1,0 +1,38 @@
+WITH a AS(
+SELECT show_id, 
+    CASE
+        WHEN date_added LIKE '%January %' THEN REPLACE(TRIM(date_added),'January ','01-')
+        WHEN date_added LIKE '%February %' THEN REPLACE(TRIM(date_added),'February ','02-')
+        WHEN date_added LIKE '%March %' THEN REPLACE(TRIM(date_added),'March ','03-')
+        WHEN date_added LIKE '%April %' THEN REPLACE(TRIM(date_added),'April ','04-')
+        WHEN date_added LIKE '%May %' THEN REPLACE(TRIM(date_added),'May ','05-')
+        WHEN date_added LIKE '%June %' THEN REPLACE(TRIM(date_added),'June ','06-')
+        WHEN date_added LIKE '%July %' THEN REPLACE(TRIM(date_added),'July ','07-')
+        WHEN date_added LIKE '%August %' THEN REPLACE(TRIM(date_added),'August ','08-')
+        WHEN date_added LIKE '%September %' THEN REPLACE(TRIM(date_added),'September ','09-')
+        WHEN date_added LIKE '%October %' THEN REPLACE(TRIM(date_added),'October ','10-')
+        WHEN date_added LIKE '%November %' THEN REPLACE(TRIM(date_added),'November ','11-')
+        WHEN date_added LIKE '%December %' THEN REPLACE(TRIM(date_added),'December ','12-')
+    END date
+FROM netflix_shows
+WHERE date_added != ''),
+
+b AS(
+SELECT show_id, 
+    TRIM(REPLACE(SUBSTR(date, 7, 10) || '-' || SUBSTR(date, 1, 5), ',', '')) AS datestring
+FROM a),
+
+c AS(
+SELECT show_id, 
+    CASE
+        WHEN LENGTH(datestring) = 9 THEN SUBSTR(datestring, 1, 8) || '0' || SUBSTR(datestring, 9, 9)
+        ELSE datestring
+    END datestring2
+FROM b)
+
+SELECT count(show_id) AS quantity_added,
+    DATE(datestring2) AS date
+FROM c
+GROUP BY 2
+ORDER BY 2;
+

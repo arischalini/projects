@@ -1,0 +1,14 @@
+SELECT DISTINCT country
+FROM netflix_shows
+WHERE country NOT LIKE '%,%'
+    AND country != ''
+    AND country != 'United States';
+
+    
+ SELECT country,
+     CASE country
+         WHEN country LIKE '%United States%' THEN 'US'
+         ELSE 'other'
+     END origin
+ FROM netflix_shows
+ WHERE country = 'United States';

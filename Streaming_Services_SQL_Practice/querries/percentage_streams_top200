@@ -1,0 +1,15 @@
+SELECT Artist, COUNT(*), SUM(Streams)
+FROM spotify_top200
+WHERE Region = 'us'
+GROUP BY Artist
+ORDER BY 2 DESC;
+
+SELECT Track_Name, Artist, Streams,
+    SUM(Streams) OVER(PARTITION BY Artist)
+FROM spotify_top200;
+
+SELECT Artist, SUM(Streams)
+FROM spotify_top200
+GROUP BY Artist;
+
+#figure out how to show all tracks with artist stream sums and track percentage of those stream sum - with the use of partitions

@@ -1,0 +1,51 @@
+state,state_abbrev,rate
+Alabama,AL,6
+Alaska,AK,7.7
+Arizona,AZ,7.7
+Arkansas,AR,6.2
+California,CA,10.2
+Colorado,CO,7.3
+Connecticut,CT,7.8
+Delaware,DE,7.8
+Florida,FL,7.9
+Georgia,GA,6.6
+Hawaii,HI,11.7
+Idaho,ID,5.2
+Illinois,IL,9.1
+Indiana,IN,7.1
+Iowa,IA,5.4
+Kansas,KS,5.7
+Kentucky,KY,6.7
+Louisiana,LA,8.4
+Maine,ME,5.5
+Maryland,MD,6.7
+Massachusetts,MA,9.3
+Michigan,MI,9.8
+Minnesota,MN,5.9
+Mississippi,MS,8.1
+Missouri,MO,6.1
+Montana,MT,5.8
+Nebraska,NE,4.4
+Nevada,NV,13
+New Hampshire,NH,6.6
+New Jersey,NJ,9.6
+New Mexico,NM,8.6
+New York,NY,9.9
+North Carolina,NC,7.1
+North Dakota,ND,5
+Ohio,OH,8.3
+Oklahoma,OK,6.2
+Oregon,OR,7.8
+Pennsylvania,PA,9
+Rhode Island,RI,9.3
+South Carolina,SC,6.2
+South Dakota,SD,4.5
+Tennessee,TN,7.7
+Texas,TX,7.5
+Utah,UT,4.9
+Vermont,VT,5.6
+Virginia,VA,6.3
+Washington,WA,8.3
+West Virginia,WV,8.1
+Wisconsin,WI,6.4
+Wyoming,WY,5.9
