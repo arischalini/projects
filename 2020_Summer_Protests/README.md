@@ -1,3 +1,1 @@
-# Project2_Bari_Chalini_Godinez_Lucas
-W200 Fall21 Project2 Section 8
-HI GERALD, FOR SOME REASON MY NAME IS NOT SHOWING UP AS A CONTRIBUTOR, MAYBE BE
+# EDA_Project_Bari_Chalini_Godinez_Lucas
